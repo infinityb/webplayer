@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="google-signin-scope" content="profile email">
+    <meta name="google-signin-client_id" content="969546834490-hcmh52us6p7eethdev97mq4bnr558qj9.apps.googleusercontent.com">
+    <script src="https://apis.google.com/js/platform.js" async defer></script>
+    <script src="/static/js/jquery.js" async defer></script>
+    <script async defer>
+      function onSignIn(googleUser) {
+        $.ajax("/login", {
+          method: "POST",
+          dataType: "json",
+          data: JSON.stringify({
+            fap: "google",
+            faat: googleUser.getAuthResponse().id_token
+          }),
+          contentType: "application/json",
+        }).done(function (msg) {
+          window.localStorage.setItem("auth-token", msg.access_token);
+          window.location = '/player';
+        }).fail(function( jqXHR, textStatus ) {
+          alert( "Request failed: " + textStatus );
+        });
+
+        // Useful data for your client-side scripts:
+        var profile = googleUser.getBasicProfile();
+        console.log("ID: " + profile.getId()); // Don't send this directly to your server!
+        console.log('Full Name: ' + profile.getName());
+        console.log('Given Name: ' + profile.getGivenName());
+        console.log('Family Name: ' + profile.getFamilyName());
+        console.log("Image URL: " + profile.getImageUrl());
+        console.log("Email: " + profile.getEmail());
+
+        // The ID token you need to pass to your backend:
+        var id_token = googleUser.getAuthResponse().id_token;
+        console.log("ID Token: " + id_token);
+      };
+    </script>
+  </head>
+  <body>
+    <div class="g-signin2" data-onsuccess="onSignIn" data-theme="dark"></div>
+  </body>
+</html>

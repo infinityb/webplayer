@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Player</title>
+<script type="text/javascript">
+window.player = (function() {
+    var return_value = {};
+
+    function Player() {
+        this._context = new AudioContext();
+        this._playing = false;
+    }
+
+    Player.prototype = new Object();
+    Player.prototype.constructor = Player;
+
+    Player.prototype._start_immediate = function(buffer) {
+        let that = this;
+        var source = this._context.createBufferSource();
+        source.buffer = abuf;
+        source.connect(this._context.destination);
+        source.onended = function() {
+            that._track_finished();
+        }
+        source.start(0);
+    }
+
+    // Called when this player has finished playing a source
+    Player.prototype._track_finished = function() {
+        console.log("_track_finished");
+        if (this._queue.length > 0) {
+            this._start_immediate(this._queue[0]);
+            this._queue = this._queue.slice(1);
+        } else {
+            this._playing = false;
+        }
+    }
+
+    Player.prototype.enqueue = function(buffer) {
+        let that = this;
+        if (!this._playing) {
+            this._start_immediate(buffer);
+        } else {
+            this._queue.push(buffer);
+        }
+    }
+
+    function doHttpReq(method, url, xhrConfig) {
+        let xhr = new XMLHttpRequest();
+        xhr.responseType = "arraybuffer";
+        if (xhrConfig !== undefined) {
+            xhrConfig(xhr);
+        }
+
+        return new Promise(function(resolve, reject) {
+            xhr.onreadystatechange = function(evt) {
+                if (this.readyState == XMLHttpRequest.DONE) {
+                    if (this.status == 200) {
+                        resolve(xhr.response);
+                    } else {
+                        reject(xhr)
+                    }
+                }
+            };
+            xhr.open(method, url, true);
+            xhr.send();
+        });
+    }
+
+    function trackGetter(context) {
+        return function getTrack(url) {
+            return doHttpReq("GET", url)
+                .then(function(buf) {
+                    return context.decodeAudioData(buf);
+                });
+        }
+    }
+
+    var context = new AudioContext();
+    return_value['context'] = context;
+    var player = trackGetter(context);
+
+    player("/01.flac").then(function(abuf) {
+        return new Promise(function(resolve, reject) {
+            var source = context.createBufferSource();
+            source.buffer = abuf;
+            source.connect(context.destination);
+            
+            return_value['source'] = source;
+            source.onended = function(evt) {
+                console.log("source ended");
+                resolve();
+            }
+            source.start(0);
+        });
+    }).then(function() {
+        console.log("exit");
+    }).catch(function(err) {
+        console.log("error", err);
+    })
+
+    return return_value;
+}());
+</script>
+</head>
+<body>
+</body>
+</html>
