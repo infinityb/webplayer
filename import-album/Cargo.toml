@@ -1,0 +1,8 @@
+[package]
+name = "import-album"
+version = "0.1.0"
+authors = ["Stacey Ell <stacey.ell@gmail.com>"]
+
+[dependencies]
+postgres = { version = "*", features = [ "with-native-tls", "with-serde_json", "with-uuid" ] }
+ogg = "../ogg"

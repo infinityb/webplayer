@@ -1,15 +1,21 @@
 use hyper;
 use hyper::net::HttpsConnector;
 use hyper_native_tls::NativeTlsClient;
-
+use uuid::Uuid;
 use serde_json;
 
+
 use super::{
-    ProviderId,
+    Provider,
     ForeignAccount,
     ForeignAuthProvider,
     AuthError,
     AuthErrorKind,
+};
+
+const GOOGLE_AUTH_PROVIDER: &'static Provider = &Provider {
+    id: "ba946dd1-94a0-4eae-8260-7bb1f127f286",
+    name: "google",
 };
 
 pub struct GoogleAuthProvider {
@@ -25,8 +31,8 @@ impl GoogleAuthProvider {
 }
 
 impl GoogleAuthProvider {
-    fn provider_id(&self) -> ProviderId {
-        ProviderId("google")
+    fn provider(&self) -> &'static Provider {
+        GOOGLE_AUTH_PROVIDER
     }
 }
 
@@ -45,7 +51,7 @@ impl ForeignAuthProvider for GoogleAuthProvider {
     type Token = GoogleAuthToken;
 
     fn authenticate(&self, token: &Self::Token) -> Result<ForeignAccount, AuthError> {
-        let prov_id = self.provider_id();
+        let prov_id = self.provider();
 
         let ssl = NativeTlsClient::new().unwrap();
         let connector = HttpsConnector::new(ssl);

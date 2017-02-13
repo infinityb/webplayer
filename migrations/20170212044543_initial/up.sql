@@ -1,6 +1,6 @@
 CREATE TABLE "album" (
     id bigserial,
-    art_blob character varying(64) NOT NULL,
+    art_blob character varying(64),
 
     PRIMARY KEY (id)
 );
@@ -20,9 +20,11 @@ CREATE TABLE "song" (
     id bigserial,
     blob character varying(64) NOT NULL,
     album_id bigint NOT NULL REFERENCES album (id),
+    track_no smallint NOT NULL,
     length_ms int NOT NULL,
 
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    CONSTRAINT song_album_track_uniq UNIQUE (album_id, track_no)
 );
 
 CREATE TABLE "song_metadata" (
@@ -55,17 +57,19 @@ CREATE TABLE "foreign_account_provider" (
     id uuid,
     name character varying(64) NOT NULL,
 
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    CONSTRAINT foreign_account_provider_name_uniq UNIQUE (name)
 );
 
 CREATE TABLE "foreign_account" (
-    id uuid DEFAULT gen_random_uuid(),
-    provider_id uuid  NOT NULL REFERENCES foreign_account_provider (id),
-    foreign_id character varying(256) NOT NULL,
-    auth_token text,
+    account_id   uuid NOT NULL REFERENCES account (id),
+    provider_id  uuid NOT NULL REFERENCES foreign_account_provider (id),
+    foreign_id   character varying(256) NOT NULL,
+    auth_token   text,
 
     created_at timestamp without time zone NOT NULL DEFAULT NOW(),
     last_authenticated timestamp without time zone NOT NULL DEFAULT NOW(),
 
-    PRIMARY KEY (id)
+    PRIMARY KEY (account_id, provider_id),
+    CONSTRAINT foreign_account_prov_and_id_uniq UNIQUE (provider_id, foreign_id)
 );

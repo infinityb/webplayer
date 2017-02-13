@@ -10,7 +10,9 @@ rocket_contrib = "*"
 serde = "0.9"
 serde_json = "0.9"
 serde_derive = "0.9"
-postgres = { version = "*", features = [ "with-serde_json", "with-uuid" ] }
+postgres = { version = "*", features = [ "with-native-tls", "with-serde_json", "with-uuid" ] }
 uuid = "0.4.0"
 hyper = "*"
 hyper-native-tls = "*"
+bincode = "1.0.0-alpha2"
+rust-crypto = "^0.2"
