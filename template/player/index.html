@@ -108,7 +108,7 @@
     <script>
       $.ajax("/songs", {
         method: "GET",
-        dataType: "text",
+        dataType: "json",
         headers: {
           'Authorization': 'bearer ' + window.localStorage['auth-token'],
         },

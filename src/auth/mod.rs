@@ -39,17 +39,17 @@ impl AuthTokenInfo {
 pub struct AuthTokenBlob(pub String);
 
 impl AuthTokenBlob {
-    pub fn is_valid(&self) -> bool {
-        match self.decode() {
+    pub fn is_valid(&self, secret: &[u8]) -> bool {
+        match self.decode(secret) {
             Ok(info) => info.is_valid(),
             Err(()) => false,
         }
     }
 
-    pub fn sign(info: &AuthTokenInfo) -> AuthTokenBlob {
+    pub fn sign(secret: &[u8], info: &AuthTokenInfo) -> AuthTokenBlob {
         let mut sig = [0; 32];
         let env_data = serialize(&info, SizeLimit::Bounded(256)).unwrap();
-        env_secret_sig(&env_data, &mut sig);
+        env_secret_sig(secret, &env_data, &mut sig);
         let envelope = SigEnvelope {
             ver: 1,
             sig: sig,
@@ -59,7 +59,7 @@ impl AuthTokenBlob {
         AuthTokenBlob(hex(&out).unwrap())
     }
 
-    pub fn decode(&self) -> Result<AuthTokenInfo, ()> {
+    pub fn decode(&self, secret: &[u8]) -> Result<AuthTokenInfo, ()> {
         let envelope_data: Vec<u8> = dehex(&self.0).map_err(|e| {
             println!("error dehexing: {:?}", e);
             ()
@@ -69,7 +69,7 @@ impl AuthTokenBlob {
             println!("error deserializing envelope: {}", e);
             ()
         })?;
-        let data = validate_sig(&envelope)?;
+        let data = validate_sig(secret, &envelope)?;
         deserialize(data).map_err(|e| {
             println!("error deserializing info: {}", e);
             ()
@@ -122,21 +122,21 @@ struct SigEnvelope {
     data: Vec<u8>,
 }
 
-fn validate_sig<'a>(env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
+fn validate_sig<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
     match env.ver {
-        0 => validate_sig_v0(env),
-        1 => validate_sig_v1(env),
+        0 => validate_sig_v0(secret, env),
+        1 => validate_sig_v1(secret, env),
         _ => Err(()),
     }
 }
 
-fn validate_sig_v0<'a>(env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
+fn validate_sig_v0<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
     Ok(&env.data)
 }
 
-fn validate_sig_v1<'a>(env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
+fn validate_sig_v1<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
     let mut desired_sig = [0; 32];
-    env_secret_sig(&env.data, &mut desired_sig);
+    env_secret_sig(secret, &env.data, &mut desired_sig);
 
     if !fixed_time_eq(&env.sig, &desired_sig) {
         return Err(());
@@ -145,13 +145,9 @@ fn validate_sig_v1<'a>(env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
     Ok(&env.data)
 }
 
-fn env_secret_sig(data: &[u8], sig: &mut [u8; 32]) {
+fn env_secret_sig(secret: &[u8], data: &[u8], sig: &mut [u8; 32]) {
     use crypto::mac::Mac;
-
-    let sec = ::std::env::var("APPLICATION_SECRET").unwrap();
-    let sec = dehex(&sec).unwrap();
-
-    let mut hmac = Hmac::new(Sha256::new(), &sec);
+    let mut hmac = Hmac::new(Sha256::new(), &secret);
     hmac.input(&data);
     hmac.raw_result(sig);
 }

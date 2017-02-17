@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use uuid::Uuid;
 use postgres::{Connection, TlsMode};
@@ -6,39 +6,8 @@ use postgres::tls::native_tls::NativeTls;
 use postgres::types::FromSql;
 use postgres::rows::Rows;
 
-#[derive(Debug)]
-pub struct AlbumId(pub i64);
-
-#[derive(Debug)]
-pub struct Album {
-    pub id: AlbumId,
-    pub art_blob: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct AlbumMetadata {
-    pub album_id: AlbumId,
-    pub field_name: String,
-    pub value: String,
-}
-
-#[derive(Debug)]
-pub struct SongId(pub i64);
-
-#[derive(Debug)]
-pub struct Song {
-    pub id: SongId,
-    pub album_id: AlbumId,
-    pub blob: String,
-    pub length_ms: i32,
-}
-
-#[derive(Debug)]
-pub struct SongMetadata {
-    pub song_id: SongId,
-    pub field_name: String,
-    pub value: String,
-}
+use ::util::json::JsonDocument;
+use ::model::{AlbumId, Album, SongId, Song};
 
 #[derive(Debug)]
 pub struct AccountSongMetadataId(pub i64);
@@ -85,21 +54,15 @@ pub struct ForeignAccount {
     provider_id: ForeignAccountProviderId,
     foreign_id: String,
     auth_token: String,
-
-    // created_at: ...
-    // last_authenticated: ...
 }
-
 
 use super::foreign_auth::{
     ForeignAccount as AuthForeignAccount,
 };
 
-pub fn get_conn() -> Result<Connection, Box<::std::error::Error>> {
-    use std::env::var;
+pub fn get_conn(dburl: &str) -> Result<Connection, Box<::std::error::Error>> {
     let negotiator = NativeTls::new().unwrap();
-    let database = var("PG_DATABASE_URL").unwrap();
-    let conn = try!(Connection::connect(&database[..], TlsMode::None));
+    let conn = try!(Connection::connect(dburl, TlsMode::None));
     Ok(conn)
 }
 
@@ -115,7 +78,6 @@ fn extract_single2<T: FromSql>(rows: Rows) -> Result<T, Box<::std::error::Error>
 /// returned for really unexpected errors
 fn internal_error() -> Box<::std::error::Error> {
     use std::io;
-
     return Box::new(io::Error::new(io::ErrorKind::Other, "DB Error"));
 }
 
@@ -153,3 +115,43 @@ pub fn find_or_create_user(connection: &Connection, acc: &AuthForeignAccount) ->
     
     Ok(AccountId(user_id))
 }
+
+pub fn get_songs(connection: &Connection) -> Result<impl Iterator<Item=Song>, Box<::std::error::Error>>
+{
+    let rows = try!(connection.query("
+        SELECT
+            s.id AS song_id,
+            s.blob AS song_blob,
+            s.length_ms AS song_length_ms,
+            s.track_no AS song_track_no,
+            (
+                SELECT jsonb_object_agg(sm.field_name, sm.value) AS song_metadata
+                FROM song_metadata AS sm WHERE sm.song_id = s.id
+            ) AS song_metadata,
+            s.album_id AS album_id,
+            (SELECT a.art_blob FROM album AS a WHERE s.album_id = a.id) AS album_art_blob,
+            (
+                SELECT jsonb_object_agg(am.field_name, am.value) AS album_metadata
+                FROM album_metadata AS am WHERE am.album_id = s.album_id
+            ) AS AS album_metadata
+        FROM song AS s
+    ", &[]));
+    let mut out = Vec::new();
+    for row in rows.iter() {
+        let album = Album {
+            id: AlbumId(row.get(5)),
+            art_blob: row.get(6),
+            metadata: row.get::<_, JsonDocument>(7).deserialize()?,
+        };
+        out.push(Song {
+            id: SongId(row.get(0)),
+            album: album,
+            blob: row.get(1),
+            length_ms: row.get(2),
+            track_no: row.get(3),
+            metadata: row.get::<_, JsonDocument>(4).deserialize()?,
+        });
+    }
+    Ok(out.into_iter())
+}
+
