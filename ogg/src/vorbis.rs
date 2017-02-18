@@ -171,7 +171,7 @@ impl VorbisPacket {
         unsafe { mem::transmute(self) }
     }
 
-    pub fn find_identification<'a, I>(iter: I) -> Result<&'a VorbisPacket, ()>
+    pub fn find_identification<'a, I>(iter: &mut I) -> Result<&'a VorbisPacket, ()>
         where I: Iterator<Item=&'a OggPage>
     {
         for page in iter {
@@ -186,7 +186,7 @@ impl VorbisPacket {
         Err(())
     }
 
-    pub fn find_comments<'a, I>(iter: I) -> Result<&'a VorbisPacket, ()>
+    pub fn find_comments<'a, I>(iter: &mut I) -> Result<&'a VorbisPacket, ()>
         where I: Iterator<Item=&'a OggPage>
     {
         for page in iter {

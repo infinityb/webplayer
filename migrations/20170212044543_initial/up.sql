@@ -61,6 +61,9 @@ CREATE TABLE "foreign_account_provider" (
     CONSTRAINT foreign_account_provider_name_uniq UNIQUE (name)
 );
 
+INSERT INTO foreign_account_provider (id, name)
+VALUES ('ba946dd1-94a0-4eae-8260-7bb1f127f286', 'google');
+
 CREATE TABLE "foreign_account" (
     account_id   uuid NOT NULL REFERENCES account (id),
     provider_id  uuid NOT NULL REFERENCES foreign_account_provider (id),

@@ -1,10 +1,20 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Write, Read};
 
 extern crate postgres;
 extern crate ogg;
+extern crate crypto;
+extern crate serde;
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
+
 use postgres::{Connection, TlsMode};
 use postgres::types::FromSql;
 use postgres::rows::Rows;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 
 
 #[derive(Debug)]
@@ -12,7 +22,6 @@ pub struct SongId(pub i64);
 
 #[derive(Debug)]
 pub struct AlbumId(pub i64);
-
 
 /// returned for really unexpected errors
 fn internal_error() -> Box<::std::error::Error> {
@@ -82,6 +91,7 @@ pub fn create_album(
     Ok(AlbumId(0))
 }
 
+#[derive(Serialize, Debug)]
 pub struct SongCreate {
     pub blob: String,
     pub track_no: i16,
@@ -89,10 +99,11 @@ pub struct SongCreate {
     pub metadata: HashMap<String, String>,
 }
 
+#[derive(Serialize, Debug)]
 pub struct AlbumCreate {
     pub songs: Vec<SongCreate>,
     pub art_blob: Option<String>,
-    pub metadata: HashMap<String, String>,   
+    pub metadata: HashMap<String, String>,
 }
 
 pub fn get_conn() -> Result<Connection, Box<::std::error::Error>> {
@@ -102,62 +113,125 @@ pub fn get_conn() -> Result<Connection, Box<::std::error::Error>> {
     Ok(conn)
 }
 
+fn remove_album_meta(meta: &HashMap<String, String>, songs: &mut [SongCreate])
+{
+    for song in songs.iter_mut() {
+        for key in meta.keys() {
+            song.metadata.remove(key);
+        }
+    }
+}
+
+fn album_from_songs(mut songs: Vec<SongCreate>) -> AlbumCreate {
+    let metadata = unified_metadata(&songs);
+    remove_album_meta(&metadata, &mut songs);
+
+    AlbumCreate {
+        songs: songs,
+        art_blob: None,
+        metadata: metadata,
+    }
+}
+
+fn unified_metadata(ss: &[SongCreate]) -> HashMap<String, String>
+{
+    let mut song_iter = ss.iter();
+    let mut min = match song_iter.next() {
+        Some(song) => song.metadata.clone(),
+        None => return HashMap::new(),
+    };
+    for song in song_iter {
+        let mut remove_keys = Vec::new();
+        for (key, val) in min.iter() {
+            match song.metadata.get(key) {
+                Some(val_cand) => {
+                    if val_cand != val {
+                        remove_keys.push(key.clone());
+                    }
+                },
+                None => {
+                    remove_keys.push(key.clone());
+                }
+            }
+        }
+        for key in remove_keys.into_iter() {
+            min.remove(&key);
+        }
+    }
+    min
+}
+
 fn main() {
+    use std::env::args_os;
+    use std::fs::read_dir;
+
     let conn = get_conn().unwrap();
 
-    let mut album_metadata = HashMap::new();
-    album_metadata.insert("album".into(), "Senki Zesshou Symphogear Character Song Series 4 - Yukine Chris".into());
-    album_metadata.insert("artist".into(), "Takagaki Ayahi".into());
-    album_metadata.insert("COMMENT".into(), "Exact Audio Copy".into());
-    album_metadata.insert("DATE".into(), "2012-03-28".into());
-    album_metadata.insert("GENRE".into(), "Anime".into());
-    album_metadata.insert("TRACKTOTAL".into(), "4".into());
-    
-    let mut track01 = SongCreate {
-        blob: "5b6ff8bc3ef0110d61ccdefc7178bccb8184c6321ccb83537806ddae7d21821e".into(),
-        track_no: 1,
-        length_ms: 222773,
-        metadata: HashMap::new(),
-    };
-    track01.metadata.insert("title".into(), "Makyuu Isshi-Bal".into());
-    track01.metadata.insert("tracknumber".into(), "1".into());
-    let track01 = track01;
-    
-    let mut track02 = SongCreate {
-        blob: "3bba03c8437be25542968bd3ce838f34985ca5249b11901e8cc57e784811456b".into(),
-        track_no: 2,
-        length_ms: 239986,
-        metadata: HashMap::new(),
-    };
-    track02.metadata.insert("title".into(), "Tsunaida Te Dake ga Tsumugu mono".into());
-    track02.metadata.insert("tracknumber".into(), "2".into());
-    let track02 = track02;
+    let dir = args_os().nth(1).unwrap();
 
-    let mut track03 = SongCreate {
-        blob: "9605f1a07cacb7fda954a4c698e7bf1c6798813cf1be1d8687f4946ddefcc9e6".into(),
-        track_no: 3,
-        length_ms: 222106,
-        metadata: HashMap::new(),
-    };
-    track03.metadata.insert("title".into(), "Makyuu Isshi-Bal (off vocal)".into());
-    track03.metadata.insert("tracknumber".into(), "3".into());
-    let track03 = track03;
+    let mut files = Vec::new();
+    let mut songs = Vec::new();
+    for entry in read_dir(&dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            files.push(entry.path());
+        }
+    }
 
-    let mut track04 = SongCreate {
-        blob: "8a1b641a12b0b007a51d5a9dd9728f1f7b73551d500ec7060d06d34ac44d79b5".into(),
-        track_no: 4,
-        length_ms: 239319,
-        metadata: HashMap::new(),
-    };
-    track04.metadata.insert("title".into(), "Tsunaida Te Dake ga Tsumugu mono (off vocal)".into());
-    track04.metadata.insert("tracknumber".into(), "4".into());
-    let track04 = track04;
+    let mut blobs = HashMap::new();
+    let mut track_num = 1;
+    for file in files.iter() {
+        let mut buf = Vec::new();
+        let mut ff = File::open(&file).unwrap();
+        ff.read_to_end(&mut buf).unwrap();
 
-    let album = AlbumCreate {
-        songs: vec![track01, track02, track03, track04],
-        art_blob: None,
-        metadata: album_metadata,
-    };
+        let mut hasher = Sha256::new();
+        hasher.input(&buf);
+        let blob_hash = hasher.result_str();
+
+        let track = match ogg::OggTrack::new(&buf) {
+            Ok(track) => track,
+            Err(ogg::OggPageCheckError::BadCapture) => continue,
+            Err(err) => panic!("{:?}", err),
+        };
+        
+        blobs.insert(blob_hash.clone(), buf.clone());
+
+        let idx = track_num;
+        track_num += 1;
+
+        let mut page_iter = track.pages();
+        let ident = ogg::vorbis::VorbisPacket::find_identification(&mut page_iter).unwrap();
+        let id_header = ident.identification_header().unwrap();
+        let sample_rate = id_header.audio_sample_rate;
+        let comments = ogg::vorbis::VorbisPacket::find_comments(&mut page_iter).unwrap();
+        let comments = comments.comments().unwrap().comments;
+
+        let mut granule_pos_max = 0;
+        for page in track.pages() {
+            if granule_pos_max < page.position() {
+                granule_pos_max = page.position();
+            }
+        }
+
+        songs.push(SongCreate {
+            blob: blob_hash,
+            track_no: idx as i16,
+            length_ms: (1000 * granule_pos_max / sample_rate as u64) as i32,
+            metadata: comments.into_iter().collect(),
+        });        
+    }
+
+    let album = album_from_songs(songs);
+    println!("{}", serde_json::to_string_pretty(&album).unwrap());
+
+    for (key, blob) in blobs.iter() {
+        use std::fs::OpenOptions;
+
+        let filename = format!("../blob/{}/{}", &key[0..2], key);
+        let mut out = OpenOptions::new().create(true).write(true).open(&filename).unwrap();
+        out.write_all(blob).unwrap();
+    }
 
     create_album(&conn, &album).unwrap();
 }

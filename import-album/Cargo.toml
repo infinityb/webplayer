@@ -6,3 +6,7 @@ authors = ["Stacey Ell <stacey.ell@gmail.com>"]
 [dependencies]
 postgres = { version = "*", features = [ "with-native-tls", "with-serde_json", "with-uuid" ] }
 ogg = { path = "../ogg" }
+rust-crypto = "^0.2"
+serde = "*"
+serde_json = "*"
+serde_derive = "*"
