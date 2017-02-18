@@ -1,0 +1,23 @@
+version: '2'
+services:
+  db:
+    image: postgres
+    ports:
+      - '5432:5432'
+    restart: always
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: musicapp
+      POSTGRES_USER: musicapp
+      POSTGRES_PASSWORD: ayy
+  music:
+    build: .
+    command: ROCKET_ENV=production cargo run --release -- config.toml
+    ports:
+      - '8000:8000'
+    restart: always
+    depends_on:
+      - db
+volumes:
+  postgres: {}
