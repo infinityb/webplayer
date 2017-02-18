@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ayy
   music:
     build: .
-    command: ROCKET_ENV=production cargo run --release -- config.toml
+    command: ROCKET_ENV=production cargo run --release -- Config.toml
     ports:
       - '8000:8000'
     restart: always
