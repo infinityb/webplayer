@@ -1,5 +1,7 @@
 ## webplayer
 
+[![Build Status](https://travis-ci.org/infinityb/webplayer.svg?branch=master)](https://travis-ci.org/infinityb/webplayer)
+
 What if you could listen to your music at work?
 
 ## Docker
