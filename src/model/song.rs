@@ -15,3 +15,4 @@ pub struct Song {
     pub metadata: BTreeMap<String, String>,
     pub album: Album,
 }
+

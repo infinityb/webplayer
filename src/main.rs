@@ -16,16 +16,17 @@ extern crate bincode;
 extern crate crypto;
 extern crate toml;
 
+use std::path::PathBuf;
 use std::io::{self, Read};
 use std::fs::File;
-use rocket::State;
+use rocket::{Response, State};
 use rocket_contrib::{JSON as Json};
 use rocket::response::content::{
     JSON as JsonResp,
     HTML as HtmlResp,
 };
 use rocket::response::{Responder, Failure};
-use rocket::http::Status;
+use rocket::http::{Status, ContentType};
 use rocket::response::Stream;
 use postgres::{Connection, TlsMode};
 
@@ -65,18 +66,15 @@ fn blob_obj_get(config: State<AppConfig>, auth: AuthTokenBlob, id: BlobId) -> im
     if !auth.is_valid(config.secret.as_bytes()) {
         return Err(Failure(Status::Forbidden));
     }
-
-    let target: BlobId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".parse().unwrap();
-    if id != target {
-        return Err(Failure(Status::NotFound));
-    }
-
-    let out: Vec<u8> = (0..64 * 1024).map(|by| {
-        let by = by as i64;
-        ((by * 524189) % 256) as u8
-    }).collect();
-
-    Ok(rocket::response::Stream::from(io::Cursor::new(out)))
+    let vfs = config.vfs_driver.boxed();
+    let stream = match vfs.open_read(&id) {
+        Ok(stream) => stream,
+        Err(err) => {
+            println!("error opening blob: {}", err);
+            return Err(Failure(Status::InternalServerError));
+        }
+    };
+    Ok(rocket::response::Stream::from(stream))
 }
 
 #[post("/blob")]
@@ -132,6 +130,20 @@ fn login_get(config: State<AppConfig>) -> impl Responder<'static> {
     HtmlResp(template.replace("__GOOGLE_AUDIENCE__", &config.google_auth.audience))
 }
 
+
+// Access-Control-Allow-Origin: *
+// Access-Control-Allow-Methods: POST
+// Access-Control-Allow-Headers: Content-Type
+
+#[options("/login")]
+fn login_options() -> impl Responder<'static> {
+    let mut builder = Response::build();
+    builder.raw_header("Access-Control-Allow-Origin", "*");
+    builder.raw_header("Access-Control-Allow-Methods", "POST");
+    builder.raw_header("Access-Control-Allow-Headers", "Content-Type");
+    builder.finalize()
+}
+
 #[post("/login", format="application/json", data="<login>")]
 fn login_post(config: State<AppConfig>, login: Json<rpc::LoginRequest>) -> impl Responder<'static> {
     let Json(login) = login;
@@ -167,11 +179,20 @@ fn login_post(config: State<AppConfig>, login: Json<rpc::LoginRequest>) -> impl 
 
     println!("auth_data = {:?}", auth_data);
     let ainfo = AuthTokenInfo::new(account.get_user_id());
-    
-    // access_token = config.create_auth_token(&user_id);
-    Ok(Json(rpc::LoginResponse {
-        access_token: AuthTokenBlob::sign(config.secret.as_bytes(), &ainfo).into_inner(),
-    }))
+    let token = AuthTokenBlob::sign(config.secret.as_bytes(), &ainfo).into_inner();
+
+    let body = serde_json::to_vec(&rpc::LoginResponse {
+        access_token: token,
+    }).unwrap();
+
+    let mut builder = Response::build();
+    builder.status(Status::Ok);
+    builder.header(ContentType::JSON);
+    builder.raw_header("Access-Control-Allow-Origin", "*");
+    builder.raw_header("Access-Control-Allow-Methods", "POST");
+    builder.raw_header("Access-Control-Allow-Headers", "Content-Type");
+    builder.sized_body(io::Cursor::new(body));
+    Ok(builder.finalize())
 }
 
 fn main() {
@@ -190,6 +211,7 @@ fn main() {
             tracks_search_get,
             login_get,
             login_post,
+            login_options,
             songs_get,
             player_get,
         ])
@@ -202,6 +224,7 @@ struct AppConfig {
     secret: String,
     google_auth: GoogleAuthConfig,
     database: DatabaseConfig,
+    vfs_driver: VfsDriverConfig,
 }
 
 #[derive(Deserialize)]
@@ -228,3 +251,41 @@ impl DatabaseConfig {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(tag="driver_name")]
+enum VfsDriverConfig {
+    #[serde(rename="blob")]
+    Blob(BlobDriver),
+}
+
+#[derive(Deserialize, Clone)]
+struct BlobDriver {
+    blob_base: PathBuf,
+}
+
+impl BlobDriver {
+    fn create(&self) -> BlobDriver {
+        self.clone()
+    }
+}
+
+impl VfsDriverConfig {
+    fn boxed(&self) -> Box<VfsBackend> {
+        match *self {
+            VfsDriverConfig::Blob(ref cfg) => Box::new(cfg.create()),
+        }
+    }
+}
+
+trait VfsBackend {
+    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>>;
+}
+
+impl VfsBackend for BlobDriver {
+    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>> {
+        let hash = format!("{}", blob_id);
+        let path = self.blob_base.join(&hash[0..2]).join(&hash);
+        let file = try!(File::open(&path));
+        Ok(Box::new(file))
+    }
+}
