@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE "album" (
     id bigserial,
     art_blob character varying(64),
