@@ -232,7 +232,6 @@ fn wrap_json<T: serde::Serialize>(ser: &T) -> impl Responder<'static> {
 fn wrap_blob<T: 'static + Read>(rr: T) -> impl Responder<'static> {
     let mut builder = Response::build();
     builder.status(Status::Ok);
-    builder.header(ContentType::JSON);
     if ENABLE_CORS {
         builder.raw_header("Access-Control-Allow-Origin", "*");
         builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
@@ -252,8 +251,6 @@ fn main() {
     rocket::ignite()
         .mount("/static", asset::statics())
         .mount("/", routes![
-
-
             blob_obj_get,
             blob_obj_options,
             tracks_search_get,
