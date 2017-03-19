@@ -228,7 +228,7 @@ fn main() {
     for (key, blob) in blobs.iter() {
         use std::fs::OpenOptions;
 
-        let filename = format!("../blob/{}/{}", &key[0..2], key);
+        let filename = format!("xx/blob/{}/{}", &key[0..2], key);
         let mut out = OpenOptions::new().create(true).write(true).open(&filename).unwrap();
         out.write_all(blob).unwrap();
     }

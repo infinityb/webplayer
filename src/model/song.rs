@@ -3,10 +3,10 @@ use super::album::{
     Album,
 };
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct SongId(pub i64);
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Song {
     pub id: SongId,
     pub blob: String,

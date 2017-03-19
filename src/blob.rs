@@ -22,7 +22,10 @@ impl FromStr for BlobId {
 
     fn from_str(val: &str) -> Result<BlobId, DehexError> {
         let mut buf: [u8; 32] = [0; 32];
-        dehex_fixed_size(val, &mut buf[..])?;
+        let remaining = dehex_fixed_size(val, &mut buf[..])?;
+        if remaining.len() > 0 {
+            return Err(DehexError::TooLong);
+        }
         Ok(BlobId(buf))
     }
 }

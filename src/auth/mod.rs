@@ -3,7 +3,7 @@ use std::str::FromStr;
 use rocket::request::FromRequest;
 use rocket::{Request, Outcome};
 use rocket::http::Status;
-use bincode::{serialize, deserialize, SizeLimit};
+use bincode::{serialize, deserialize, Bounded};
 use ::util::{dehex, hex};
 use crypto::hmac::Hmac;
 use crypto::sha2::Sha256;
@@ -30,7 +30,7 @@ impl AuthTokenInfo {
     pub fn new(user_id: Uuid) -> AuthTokenInfo {
         AuthTokenInfo {
             id: *user_id.as_bytes(),
-            exp: now() + 12 * 3600,
+            exp: now() + 72 * 3600,
         }
     }
 }
@@ -48,14 +48,14 @@ impl AuthTokenBlob {
 
     pub fn sign(secret: &[u8], info: &AuthTokenInfo) -> AuthTokenBlob {
         let mut sig = [0; 32];
-        let env_data = serialize(&info, SizeLimit::Bounded(256)).unwrap();
+        let env_data = serialize(&info, Bounded(256)).unwrap();
         env_secret_sig(secret, &env_data, &mut sig);
         let envelope = SigEnvelope {
             ver: 1,
             sig: sig,
             data: env_data,
         };
-        let out = serialize(&envelope, SizeLimit::Bounded(256)).unwrap();
+        let out = serialize(&envelope, Bounded(256)).unwrap();
         AuthTokenBlob(hex(&out).unwrap())
     }
 
@@ -124,14 +124,9 @@ struct SigEnvelope {
 
 fn validate_sig<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
     match env.ver {
-        0 => validate_sig_v0(secret, env),
         1 => validate_sig_v1(secret, env),
         _ => Err(()),
     }
-}
-
-fn validate_sig_v0<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {
-    Ok(&env.data)
 }
 
 fn validate_sig_v1<'a>(secret: &[u8], env: &'a SigEnvelope) -> Result<&'a [u8], ()> {

@@ -1,39 +1,40 @@
 
 #[derive(Debug)]
 pub enum DehexError {
-    Truncated,
+    Truncated { odd: bool },
     TooLong,
-    InvalidChar,
+    InvalidChar(u8),
 }
 
-pub fn dehex_fixed_size(val: &str, into: &mut [u8]) -> Result<(), DehexError> {
-    let mut modulus = 0;
-    let mut buf = 0;
-    let mut output = into.iter_mut();
-
-    for byte in val.bytes() {
+pub fn dehex_fixed_size<'a>(val: &'a str, into: &mut [u8]) -> Result<&'a str, DehexError> {
+    fn nibble_from_char(ch: u8) -> Result<u8, DehexError> {
+        match ch {
+            b'A'...b'F' => Ok(ch - b'A' + 10),
+            b'a'...b'f' => Ok(ch - b'a' + 10),
+            b'0'...b'9' => Ok(ch - b'0'),
+            _ => return Err(DehexError::InvalidChar(ch)),
+        }
+    }
+    let mut consumed = 0;
+    let mut inbytes = val.bytes();
+    let mut outbytes = into.iter_mut();
+    for oby in outbytes {
+        let mut buf = 0;
+        if let Some(ch) = inbytes.next() {
+            buf |= nibble_from_char(ch)?;
+        } else {
+            return Err(DehexError::Truncated { odd: false });
+        }
         buf <<= 4;
-        match byte {
-            b'A'...b'F' => buf |= byte - b'A' + 10,
-            b'a'...b'f' => buf |= byte - b'a' + 10,
-            b'0'...b'9' => buf |= byte - b'0',
-            _ => return Err(DehexError::InvalidChar),
+        if let Some(ch) = inbytes.next() {
+            buf |= nibble_from_char(ch)?;
+        } else {
+            return Err(DehexError::Truncated { odd: true });
         }
-
-        modulus += 1;
-        if modulus == 2 {
-            modulus = 0;
-            match output.next() {
-                Some(bslot) => *bslot = buf,
-                None => return Err(DehexError::TooLong),
-            }
-        }
+        *oby = buf;
+        consumed += 2;
     }
-
-    match output.next().is_some() {
-        false => Ok(()),
-        true => Err(DehexError::Truncated),
-    }
+    Ok(&val[consumed..])
 }
 
 pub fn hex(val: &[u8]) -> Result<String, DehexError> {
@@ -57,7 +58,7 @@ pub fn dehex(val: &str) -> Result<Vec<u8>, DehexError> {
             b'A'...b'F' => buf |= byte - b'A' + 10,
             b'a'...b'f' => buf |= byte - b'a' + 10,
             b'0'...b'9' => buf |= byte - b'0',
-            _ => return Err(DehexError::InvalidChar),
+            _ => return Err(DehexError::InvalidChar(byte)),
         }
 
         modulus += 1;

@@ -3,12 +3,16 @@ use serde_json;
 use std::error::Error;
 use std::io::{Read, Write};
 
-use postgres::types::{FromSql, ToSql, IsNull, Type, SessionInfo};
+use postgres::types::{FromSql, ToSql, IsNull, Type};
 
 #[derive(Debug)]
 pub struct JsonDocument(String);
 
 impl JsonDocument {
+    pub fn empty() -> JsonDocument {
+        JsonDocument("{}".into())
+    }
+    
     pub fn into_inner(self) -> String {
         let JsonDocument(val) = self;
         val
@@ -30,7 +34,7 @@ impl ::std::ops::Deref for JsonDocument {
 }
 
 impl FromSql for JsonDocument {
-    fn from_sql(ty: &Type, mut raw: &[u8], _: &SessionInfo)
+    fn from_sql(ty: &Type, mut raw: &[u8])
         -> Result<JsonDocument, Box<Error + Sync + Send>>
     {
         if let Type::Jsonb = *ty {
@@ -56,7 +60,7 @@ impl FromSql for JsonDocument {
 }
 
 impl ToSql for JsonDocument {
-    fn to_sql(&self, ty: &Type, mut out: &mut Vec<u8>, _: &SessionInfo)
+    fn to_sql(&self, ty: &Type, mut out: &mut Vec<u8>)
         -> Result<IsNull, Box<Error + Sync + Send>>
     {
         if let Type::Jsonb = *ty {

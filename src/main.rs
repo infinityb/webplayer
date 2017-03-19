@@ -2,6 +2,7 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
 #![feature(conservative_impl_trait)]
+#![feature(fnbox)]
 
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate rocket_contrib;
@@ -15,6 +16,7 @@ extern crate hyper_native_tls;
 extern crate bincode;
 extern crate crypto;
 extern crate toml;
+extern crate url;
 
 use std::path::PathBuf;
 use std::io::{self, Read};
@@ -38,6 +40,10 @@ mod rpc;
 mod foreign_auth;
 mod auth;
 mod model;
+mod config;
+mod webby;
+
+use self::config::{AppConfig, VfsBackend};
 
 use self::blob::BlobId;
 use self::auth::{
@@ -49,23 +55,38 @@ use self::foreign_auth::{
     GoogleAuthProvider,
     GoogleAuthToken
 };
+use self::database::SongQuery;
 
-#[get("/")]
-fn hello() -> &'static str {
-    "Hello, world!"
-}
+const ENABLE_CORS: bool = true;
 
-#[get("/hi")]
-fn hi_get() -> &'static str {
-    "Hello, world!"
+const ALLOW_ORIGINS: &'static [&'static str] = &[
+    "http://music-dev.yshi.org",
+];
+
+#[options("/blob/<id>")]
+fn blob_obj_options(/* request: &rocket::Request, */ id: BlobId) -> impl Responder<'static> {
+    let mut builder = Response::build();
+
+    // webby::Cors {
+    //     allow_origins: ALLOW_ORIGINS,
+    //     allow_methods: &["GET", "POST"],
+    //     allow_headers: &["Content-Type", "Authorization"],
+    //     expose_headers: &[],
+    // }
+    //     .set_headers(&request, &mut builder)
+    //     .map_err(|()| Failure(Status::Forbidden))
+    //     ?;
+
+    builder.finalize()
 }
 
 #[get("/blob/<id>")]
-fn blob_obj_get(config: State<AppConfig>, auth: AuthTokenBlob, id: BlobId) -> impl Responder<'static> {
+fn blob_obj_get(config: State<AppConfig>, id: BlobId) -> impl Responder<'static> {
+    // auth: AuthTokenBlob, 
     // let user_id = try!(config.validate_auth(&auth));
-    if !auth.is_valid(config.secret.as_bytes()) {
-        return Err(Failure(Status::Forbidden));
-    }
+    // if !auth.is_valid(config.secret.as_bytes()) {
+    //     return Err(Failure(Status::Forbidden));
+    // }
     let vfs = config.vfs_driver.boxed();
     let stream = match vfs.open_read(&id) {
         Ok(stream) => stream,
@@ -74,7 +95,7 @@ fn blob_obj_get(config: State<AppConfig>, auth: AuthTokenBlob, id: BlobId) -> im
             return Err(Failure(Status::InternalServerError));
         }
     };
-    Ok(rocket::response::Stream::from(stream))
+    Ok(wrap_blob(stream))
 }
 
 #[post("/blob")]
@@ -103,33 +124,34 @@ fn tracks_search_get(config: State<AppConfig>, auth: AuthTokenBlob, search: Sear
     Ok(format!("{:?}", search))
 }
 
+#[options("/songs")]
+fn songs_options() -> impl Responder<'static> {
+    cors_options()
+}
+
+
 #[get("/songs")]
 fn songs_get(config: State<AppConfig>, auth: AuthTokenBlob) -> impl Responder<'static> {
     // let user_id = try!(config.validate_auth(&auth));
-    if !auth.is_valid(config.secret.as_bytes()) {
+    if false && !auth.is_valid(config.secret.as_bytes()) {
         // XXX: richer errors
         return Err(Failure(Status::Forbidden));
     }
 
-    let conn = database::get_conn(config.database.read_url()).unwrap();
-    let songs = database::get_songs(&conn)
-        .map_err(|_| Failure(Status::InternalServerError))?
-        .collect::<Vec<_>>();
+    let conn = database::drivers::get_driver(config.database.read_url())
+        .map_err(|e| {
+            println!("error: {:?}", e);
+            Failure(Status::InternalServerError)
+        })?;
 
-    Ok(Json(songs))
+    let songs = conn.get_songs(&SongQuery{})
+        .map_err(|e| {
+            println!("error: {:?}", e);
+            Failure(Status::InternalServerError)
+        })?;
+
+    Ok(wrap_json(&rpc::SongSetResponse { results: songs}))
 }
-
-#[get("/player")]
-fn player_get() -> impl Responder<'static> {
-    HtmlResp(include_str!("../template/player/index.html"))
-}
-
-#[get("/login")]
-fn login_get(config: State<AppConfig>) -> impl Responder<'static> {
-    const template: &'static str = include_str!("../template/login/index.html");
-    HtmlResp(template.replace("__GOOGLE_AUDIENCE__", &config.google_auth.audience))
-}
-
 
 // Access-Control-Allow-Origin: *
 // Access-Control-Allow-Methods: POST
@@ -137,20 +159,16 @@ fn login_get(config: State<AppConfig>) -> impl Responder<'static> {
 
 #[options("/login")]
 fn login_options() -> impl Responder<'static> {
-    let mut builder = Response::build();
-    builder.raw_header("Access-Control-Allow-Origin", "*");
-    builder.raw_header("Access-Control-Allow-Methods", "POST");
-    builder.raw_header("Access-Control-Allow-Headers", "Content-Type");
-    builder.finalize()
+    cors_options()
 }
 
 #[post("/login", format="application/json", data="<login>")]
 fn login_post(config: State<AppConfig>, login: Json<rpc::LoginRequest>) -> impl Responder<'static> {
     let Json(login) = login;
 
-    let conn = database::get_conn(config.database.write_url())
+    let mut conn = database::drivers::get_driver(config.database.read_url())
         .map_err(|e| {
-            println!("postgres connection failure: {}", e);
+            println!("error: {:?}", e);
             Failure(Status::InternalServerError)
         })?;
 
@@ -171,7 +189,7 @@ fn login_post(config: State<AppConfig>, login: Json<rpc::LoginRequest>) -> impl 
     }
     let auth_data = auth_data.unwrap();
 
-    let account = database::find_or_create_user(&conn, &auth_data)
+    let account = conn.find_or_create_user(&auth_data)
         .map_err(|e| {
             println!("error: {}", e);
             Failure(Status::Forbidden)
@@ -181,18 +199,47 @@ fn login_post(config: State<AppConfig>, login: Json<rpc::LoginRequest>) -> impl 
     let ainfo = AuthTokenInfo::new(account.get_user_id());
     let token = AuthTokenBlob::sign(config.secret.as_bytes(), &ainfo).into_inner();
 
-    let body = serde_json::to_vec(&rpc::LoginResponse {
+    Ok(wrap_json(&rpc::LoginResponse {
         access_token: token,
-    }).unwrap();
+    }))
+}
+
+fn cors_options() -> impl Responder<'static> {
+    let mut builder = Response::build();
+    if ENABLE_CORS {
+        builder.raw_header("Access-Control-Allow-Origin", "*");
+        builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
+        builder.raw_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+    builder.finalize()
+}
+
+fn wrap_json<T: serde::Serialize>(ser: &T) -> impl Responder<'static> {
+    let body = serde_json::to_vec(ser).unwrap();
 
     let mut builder = Response::build();
     builder.status(Status::Ok);
     builder.header(ContentType::JSON);
-    builder.raw_header("Access-Control-Allow-Origin", "*");
-    builder.raw_header("Access-Control-Allow-Methods", "POST");
-    builder.raw_header("Access-Control-Allow-Headers", "Content-Type");
+    if ENABLE_CORS {
+        builder.raw_header("Access-Control-Allow-Origin", "*");
+        builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
+        builder.raw_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
     builder.sized_body(io::Cursor::new(body));
-    Ok(builder.finalize())
+    builder.finalize()
+}
+
+fn wrap_blob<T: 'static + Read>(rr: T) -> impl Responder<'static> {
+    let mut builder = Response::build();
+    builder.status(Status::Ok);
+    builder.header(ContentType::JSON);
+    if ENABLE_CORS {
+        builder.raw_header("Access-Control-Allow-Origin", "*");
+        builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
+        builder.raw_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+    builder.chunked_body(rr, 32 * 1024);
+    builder.finalize()
 }
 
 fn main() {
@@ -205,87 +252,16 @@ fn main() {
     rocket::ignite()
         .mount("/static", asset::statics())
         .mount("/", routes![
-            hello,
-            hi_get,
+
+
             blob_obj_get,
+            blob_obj_options,
             tracks_search_get,
-            login_get,
             login_post,
             login_options,
             songs_get,
-            player_get,
+            songs_options,
         ])
         .manage(app)
         .launch()
-}
-
-#[derive(Deserialize)]
-struct AppConfig {
-    secret: String,
-    google_auth: GoogleAuthConfig,
-    database: DatabaseConfig,
-    vfs_driver: VfsDriverConfig,
-}
-
-#[derive(Deserialize)]
-struct GoogleAuthConfig {
-    audience: String,
-}
-
-#[derive(Deserialize)]
-struct DatabaseConfig {
-    read_url: Option<String>,
-    write_url: String,
-}
-
-impl DatabaseConfig {
-    fn read_url(&self) -> &str {
-        if let Some(ref url) = self.read_url {
-            return url;
-        }
-        &self.write_url
-    }
-
-    fn write_url(&self) -> &str {
-        &self.write_url
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(tag="driver_name")]
-enum VfsDriverConfig {
-    #[serde(rename="blob")]
-    Blob(BlobDriver),
-}
-
-#[derive(Deserialize, Clone)]
-struct BlobDriver {
-    blob_base: PathBuf,
-}
-
-impl BlobDriver {
-    fn create(&self) -> BlobDriver {
-        self.clone()
-    }
-}
-
-impl VfsDriverConfig {
-    fn boxed(&self) -> Box<VfsBackend> {
-        match *self {
-            VfsDriverConfig::Blob(ref cfg) => Box::new(cfg.create()),
-        }
-    }
-}
-
-trait VfsBackend {
-    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>>;
-}
-
-impl VfsBackend for BlobDriver {
-    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>> {
-        let hash = format!("{}", blob_id);
-        let path = self.blob_base.join(&hash[0..2]).join(&hash);
-        let file = try!(File::open(&path));
-        Ok(Box::new(file))
-    }
 }

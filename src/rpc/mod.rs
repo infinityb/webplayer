@@ -13,6 +13,11 @@ pub use self::album::{
     AlbumCreateResponse,
 };
 
+mod song;
+pub use self::song::{
+    SongSetResponse,
+};
+
 struct Error {
     //
 }

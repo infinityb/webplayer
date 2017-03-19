@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct AlbumId(pub i64);
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Album {
     pub id: AlbumId,
     pub art_blob: Option<String>,

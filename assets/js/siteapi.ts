@@ -12,6 +12,7 @@ class LoginRequest {
     }
 
     run(runner: any): Promise<LoginResponse> {
+        // raises {AuthError}
         return new Promise(function(resolve, reject) {
             reject(new Unimplemented());
         });
@@ -39,6 +40,16 @@ class SongSearch {
     }
 
     run(runner: any): Promise<SongSearchResponse> {
+        // raises {AuthError}
+        return new Promise(function(resolve, reject) {
+            reject(new Unimplemented());
+        });
+    }
+}
+
+class SongsAllRequest {
+    run(runner: any): Promise<SongSearchResponse> {
+        // raises {AuthError}
         return new Promise(function(resolve, reject) {
             reject(new Unimplemented());
         });
@@ -51,11 +62,15 @@ class SongSearchResponse {
 
 class Song {
     id: number;
-    album_id: number;
+    album: Album;
     blob: string;
     length_ms: number;
     track_no: number;
+    metadata: Map<string, string>;
+}
+
+class Album {
+    id: number;
     art_blob: string;
-    song_metadata: Map<string, string>;
-    album_metadata: Map<string, string>;
+    metadata: Map<string, string>;
 }
