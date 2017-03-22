@@ -28,7 +28,7 @@ use rocket::response::content::{
     HTML as HtmlResp,
 };
 use rocket::response::{Responder, Failure};
-use rocket::http::{Status, ContentType};
+use rocket::http::{Header, Status, ContentType};
 use rocket::response::Stream;
 use postgres::{Connection, TlsMode};
 
@@ -131,9 +131,11 @@ fn songs_options() -> impl Responder<'static> {
 
 
 #[get("/songs")]
-fn songs_get(config: State<AppConfig>, auth: AuthTokenBlob) -> impl Responder<'static> {
-    // let user_id = try!(config.validate_auth(&auth));
-    if false && !auth.is_valid(config.secret.as_bytes()) {
+fn songs_get(
+    config: State<AppConfig>,
+    auth: AuthTokenBlob,
+) -> impl Responder<'static> {
+    if !auth.is_valid(config.secret.as_bytes()) {
         // XXX: richer errors
         return Err(Failure(Status::Forbidden));
     }
@@ -145,12 +147,13 @@ fn songs_get(config: State<AppConfig>, auth: AuthTokenBlob) -> impl Responder<'s
         })?;
 
     let songs = conn.get_songs(&SongQuery{})
+        .map(rpc::SongSetResponse::from)
         .map_err(|e| {
             println!("error: {:?}", e);
             Failure(Status::InternalServerError)
         })?;
 
-    Ok(wrap_json(&rpc::SongSetResponse { results: songs}))
+    Ok(wrap_json_typed("SongCollection", &songs))
 }
 
 // Access-Control-Allow-Origin: *
@@ -229,7 +232,22 @@ fn wrap_json<T: serde::Serialize>(ser: &T) -> impl Responder<'static> {
     builder.finalize()
 }
 
-fn wrap_blob<T: 'static + Read + Seek>(rr: T) -> impl Responder<'static> {
+fn wrap_json_typed<T: serde::Serialize>(class: &str, ser: &T) -> impl Responder<'static> {
+    let body = serde_json::to_vec(ser).unwrap();
+
+    let mut builder = Response::build();
+    builder.status(Status::Ok);
+    builder.header(Header::new("Content-Type", format!("application/vnd.org.yshi.musicapp.v1+json;class={}", class)));
+    if ENABLE_CORS {
+        builder.raw_header("Access-Control-Allow-Origin", "*");
+        builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
+        builder.raw_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+    builder.sized_body(io::Cursor::new(body));
+    builder.finalize()
+}
+
+fn wrap_blob<T: 'static + Read>(rr: T) -> impl Responder<'static> {
     let mut builder = Response::build();
     builder.status(Status::Ok);
     if ENABLE_CORS {

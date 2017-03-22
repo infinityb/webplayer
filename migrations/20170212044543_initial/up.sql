@@ -24,7 +24,6 @@ CREATE TABLE "song" (
     album_id bigint NOT NULL REFERENCES album (id),
     track_no smallint NOT NULL,
     length_ms int NOT NULL,
-
     PRIMARY KEY (id),
     CONSTRAINT song_album_track_uniq UNIQUE (album_id, track_no)
 );

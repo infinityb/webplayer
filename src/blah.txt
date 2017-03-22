@@ -1,0 +1,126 @@
+
+            root_get,
+            player_get,
+            common_js_get,
+            app_bundle_get,
+            hello_image_get,
+            login_get,
+
+
+const APP_INDEX: &'static str = include_str!("../assets/__built__/index.html");
+const APP_COMMONS_JS: &'static str = include_str!("../assets/__built__/commons.js");
+const APP_BUNDLE: &'static str = include_str!("../assets/__built__/app.edd5d7a5fee5cee4a8da.bundle.js");
+const APP_COMP_APP_HELLO: &'static [u8] = include_bytes!("../assets/__built__/f/components/App/hello.afa648da6fc4a46c33b205ad4662c63c.jpg");
+
+#[get("/")]
+fn root_get() -> impl Responder<'static>
+{
+    HtmlResp(APP_INDEX)
+}
+
+#[get("/player")]
+fn player_get() -> impl Responder<'static>
+{
+    HtmlResp(APP_INDEX)
+}
+
+#[get("/login")]
+fn login_get(config: State<AppConfig>) -> impl Responder<'static>
+{
+    HtmlResp(APP_INDEX)
+}
+
+#[get("/f/components/App/hello.afa648da6fc4a46c33b205ad4662c63c.jpg")]
+fn hello_image_get(config: State<AppConfig>) -> impl Responder<'static>
+{
+    let mut builder = Response::build();
+    builder.header(ContentType::JPEG);
+    builder.sized_body(io::Cursor::new(APP_COMP_APP_HELLO));
+    builder.finalize()
+}
+
+#[get("/commons.js")]
+fn common_js_get(config: State<AppConfig>) -> impl Responder<'static> {
+    let mut builder = Response::build();
+    builder.header(ContentType::JavaScript);
+    builder.sized_body(io::Cursor::new(APP_COMMONS_JS));
+    builder.finalize()
+}
+
+#[get("/app.edd5d7a5fee5cee4a8da.bundle.js")]
+fn app_bundle_get(config: State<AppConfig>) -> impl Responder<'static>
+{
+    let mut builder = Response::build();
+    builder.header(ContentType::JavaScript);
+    builder.sized_body(io::Cursor::new(APP_BUNDLE));
+    builder.finalize()
+}
+
+
+//::// cue example //:://
+
+[
+    {
+        "start_at": "0:00:00",
+        "metadata": {
+            "title": "SET 01"
+            "performer": "kei。",
+        }
+    },
+    {
+        "start_at": "43:27:30",
+        "metadata": {
+            "title": "SET 02"
+            "performer": "Hokboy",
+        }
+    },
+    {
+        "start_at": "87:36:50",
+        "metadata": {
+            "title": "SET 03"
+            "performer": "3x6",
+        }
+    },
+    {
+        "start_at": "129:56:00",
+        "metadata": {
+            "title": "SET 04"
+            "performer": "esupa",
+        }
+    },
+    {
+        "start_at": "179:04:00",
+        "metadata": {
+            "title": "SET 05"
+            "performer": "kamome sano",
+        }
+    },
+    {
+        "start_at": "220:53:30",
+        "metadata": {
+            "title": "SET 06"
+            "performer": "KAN TAKAHIKO",
+        }
+    },
+    {
+        "start_at": "266:43:00",
+        "metadata": {
+            "title": "SET 07"
+            "performer": "chefoba",
+        }
+    },
+    {
+        "start_at": "313:46:00",
+        "metadata": {
+            "title": "SET 08"
+            "performer": "melo",
+        }
+    },
+    {
+        "start_at": "357:05:00",
+        "metadata": {
+            "title": "Talking"
+            "performer": "MOGRA",
+        }
+    }
+]

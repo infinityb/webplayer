@@ -56,6 +56,11 @@ impl DbConnector for PostgresConnector {
                     SELECT jsonb_object_agg(am.field_name, am.value) AS album_metadata
                     FROM album_metadata AS am WHERE am.album_id = s.album_id
                 ) AS album_metadata
+                -- s.series_id AS series_id,
+                -- (
+                --     SELECT jsonb_object_agg(sem.field_name, sem.value) AS series_metadata
+                --     FROM series_metadata AS sem WHERE sem.series_id = s.series_id
+                -- ) AS series_metadata
             FROM song AS s
         ", &[]));
         let mut out = Vec::new();

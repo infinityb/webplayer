@@ -40,8 +40,6 @@ pub fn get_conn(url: &str) -> io::Result<MockConnector> {
         albums: fixtures.albums.clone(),
         accounts: HashMap::new(),
     });
-
-    return Err(io::Error::new(io::ErrorKind::Other, "unimplemented"));
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,0 +1,1 @@
+ALTER TABLE song DROP COLUMN cue_data;
