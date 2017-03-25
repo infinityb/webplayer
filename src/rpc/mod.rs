@@ -13,24 +13,14 @@ pub use self::album::{
     AlbumCreateResponse,
 };
 
-mod song;
-pub use self::song::{
-    SongSetResponse,
-};
+pub mod cursor;
+pub mod hateoas;
+pub use self::hateoas::HateoasCollection;
 
-mod ograph;
+mod hateoas_def; // traits only
+pub mod query;
+pub mod ser;
+
 struct Error {
     //
 }
-
-// rocket enforces the existence atm so this one is harder.
-//
-// {"error": {
-//    "type": "missing-access-token",
-//    "message" "Missing acess token"
-// }}
-
-// {"error": {
-//    "type": "invalid-access-token",
-//    "message" "Invalid or expired acess token"
-// }}

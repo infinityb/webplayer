@@ -1,10 +1,11 @@
+
 use std::collections::{VecDeque, BTreeMap};
 
 use serde;
 use serde::ser::Error as SError;
 use serde_json;
 
-trait HateoasObject
+pub trait HateoasObject
 {
     fn relative_url(&self) -> String;
 
@@ -15,7 +16,7 @@ trait HateoasObject
     fn rels(&self) -> Vec<(String, String)>;
 }
 
-struct HateoasCollection<T>
+pub struct HateoasCollection<T>
 {
     pub endpoint: &'static str,
     pub next_token: String,
@@ -105,10 +106,10 @@ impl<'a, T: 'a> serde::ser::Serialize for HateoasCollectionLinks<'a, T>
     }
 }
 
-struct HateoasLink<'a>
+pub struct HateoasLink<'a>
 {
-    href: String,
-    title: &'a str,
+    pub href: String,
+    pub title: &'a str,
 }
 
 impl<'a> serde::ser::Serialize for HateoasLink<'a>
@@ -126,98 +127,3 @@ impl<'a> serde::ser::Serialize for HateoasLink<'a>
         map.end()
     }
 }
-
-
-fn into_json_value<S: ?Sized>(s: &S)
-    -> serde_json::Result<serde_json::Value>
-    where S: serde::ser::Serialize
-{
-    // this is horrible, sorry.
-    // perhaps we could serialize into a flatbuffer that serializes into JSON
-    let bytes = serde_json::to_vec(s)?;
-    serde_json::from_slice(&bytes)
-}
-
-// mod test {
-
-//     #[derive(Clone)]
-//     struct Person {
-//         id: i32,
-//         name: String,
-//         mother: Option<Box<Person>>,
-//         father: Option<Box<Person>>,
-//         spouse: Option<Box<Person>>,
-//     }
-
-//     struct PersonHateoas<'a>(&'a Person);
-//     struct Ref { val: String }
-
-//     impl serde::ser::Serialize for Ref
-//     {
-//         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//             where S: serde::Serializer
-//         {
-//             use serde::ser::SerializeMap;
-
-//             let mut map = serializer.serialize_map(Some(1))?;
-//             map.serialize_key("$ref")?;
-//             map.serialize_value(&self.val)?;
-//             map.end()
-//         }
-//     }
-
-//     impl<'a> serde::ser::Serialize for PersonHateoas<'a>
-//     {
-//         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//             where S: serde::Serializer
-//         {
-//             use serde::ser::SerializeMap;
-
-//             let mut map = serializer.serialize_map(None)?;
-//             map.serialize_key("id")?;
-//             map.serialize_value(&self.0.id)?;
-//             map.serialize_key("name")?;
-//             map.serialize_value(&self.0.name)?;
-//             if let Some(ref mother) = self.0.mother {
-//                 map.serialize_key("mother")?;
-//                 map.serialize_value(&Ref { val: mother.relative_url() })?;
-//             }
-//             if let Some(ref father) = self.0.father {
-//                 map.serialize_key("father")?;
-//                 map.serialize_value(&Ref { val: father.relative_url() })?;
-//             }
-//             if let Some(ref spouse) = self.0.spouse {
-//                 map.serialize_key("spouse")?;
-//                 map.serialize_value(&Ref { val: spouse.relative_url() })?;
-//             }
-//             map.end()
-//         }
-//     }
-
-//     impl HateoasObject for Person {
-//         fn relative_url(&self) -> String
-//         {
-//             format!("/person/{}", self.id)
-//         }
-
-//         fn serialize(&self) -> serde_json::Result<serde_json::Value>
-//         {
-//             into_json_value(&PersonHateoas(self))
-//         }
-
-//         fn dependencies(&self) -> Vec<Box<HateoasObject>>
-//         {
-//             let mut out: Vec<Box<HateoasObject>> = Vec::new();
-//             if let Some(ref mother) = self.mother {
-//                 out.push(Box::new(*mother.clone()))
-//             }
-//             if let Some(ref father) = self.father {
-//                 out.push(Box::new(*father.clone()))
-//             }
-//             if let Some(ref spouse) = self.spouse {
-//                 out.push(Box::new(*spouse.clone()))
-//             }
-//             out
-//         }
-//     }
-// }

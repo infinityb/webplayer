@@ -32,19 +32,18 @@ use rocket::http::{Header, Status, ContentType};
 use rocket::response::Stream;
 use postgres::{Connection, TlsMode};
 
-mod util;
-mod blob;
-mod asset;
-mod database;
-mod rpc;
-mod foreign_auth;
-mod auth;
-mod model;
-mod config;
-mod webby;
+pub mod util;
+pub mod blob;
+pub mod asset;
+pub mod database;
+pub mod rpc;
+pub mod foreign_auth;
+pub mod auth;
+pub mod model;
+pub mod config;
+pub mod webby;
 
 use self::config::{AppConfig, VfsBackend};
-
 use self::blob::BlobId;
 use self::auth::{
     AuthTokenBlob,
@@ -56,6 +55,7 @@ use self::foreign_auth::{
     GoogleAuthToken
 };
 use self::database::SongQuery;
+use self::rpc::HateoasCollection;
 
 const ENABLE_CORS: bool = true;
 
@@ -129,13 +129,14 @@ fn songs_options() -> impl Responder<'static> {
     cors_options()
 }
 
+const REQUIRE_AUTH: bool = false;
 
 #[get("/songs")]
 fn songs_get(
     config: State<AppConfig>,
     auth: AuthTokenBlob,
 ) -> impl Responder<'static> {
-    if !auth.is_valid(config.secret.as_bytes()) {
+    if REQUIRE_AUTH && !auth.is_valid(config.secret.as_bytes()) {
         // XXX: richer errors
         return Err(Failure(Status::Forbidden));
     }
@@ -147,13 +148,20 @@ fn songs_get(
         })?;
 
     let songs = conn.get_songs(&SongQuery{})
-        .map(rpc::SongSetResponse::from)
+        //.map(rpc::SongSetResponse::from)
         .map_err(|e| {
             println!("error: {:?}", e);
             Failure(Status::InternalServerError)
         })?;
 
-    Ok(wrap_json_typed("SongCollection", &songs))
+    Ok(wrap_json_typed("SongCollection", &HateoasCollection {
+        endpoint: "/songs",
+        next_token: "__next".into(),
+        curr_token: "__curr".into(),
+        prev_token: "__prev".into(),
+        limit: 100,
+        items: songs,
+    }))
 }
 
 // Access-Control-Allow-Origin: *
@@ -247,7 +255,7 @@ fn wrap_json_typed<T: serde::Serialize>(class: &str, ser: &T) -> impl Responder<
     builder.finalize()
 }
 
-fn wrap_blob<T: 'static + Read>(rr: T) -> impl Responder<'static> {
+fn wrap_blob<T: 'static + Read + Seek>(rr: T) -> impl Responder<'static> {
     let mut builder = Response::build();
     builder.status(Status::Ok);
     if ENABLE_CORS {

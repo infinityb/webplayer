@@ -1,90 +1,17 @@
 use serde;
-use super::super::model;
+use serde_json;
 
-#[derive(Serialize)]
-pub struct SongSetResponse {
-    pub results: Vec<Song>,
-}
+use super::to_json_value;
+use super::super::hateoas::{self, HateoasObject, HateoasLink};
+use model;
 
-impl From<Vec<model::Song>> for SongSetResponse {
-    fn from(v: Vec<model::Song>) -> SongSetResponse {
-        SongSetResponse {
-            results: v.into_iter().map(|s| Song { wrapped: s }).collect(),
-        }
-    }
-}
-
-pub struct SongCursorResponse {
-    pub next_token: String,
-    pub curr_token: String,
-    pub prev_token: String,
-    pub limit: u32,
-    pub items: Vec<Song>,
-}
-
-impl serde::ser::Serialize for SongCursorResponse
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer
-    {
-        use serde::ser::SerializeMap;
-
-        let mut map = serializer.serialize_map(None)?;
-        song_cursor_hateoas_partial(&mut map, self)?;
-        map.serialize_key("_items")?;
-        map.serialize_value(&self.items)?;
-        map.end()
-    }
-}
-
-fn song_cursor_hateoas_partial<S>(mm: &mut S, scr: &SongCursorResponse)
-    -> Result<(), S::Error>
-    where S: serde::ser::SerializeMap
-{
-    struct HateoasMeta<'a>
-    {
-        scr: &'a SongCursorResponse,
-    }
-
-    impl<'a> serde::ser::Serialize for HateoasMeta<'a>
-    {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: serde::Serializer
-        {
-            use serde::ser::SerializeMap;
-
-            let mut map = serializer.serialize_map(None)?;
-
-            map.serialize_key("self")?;
-            map.serialize_value(&HateoasLink {
-                href: format!("/songs?_cq={}&limit={}", self.scr.curr_token, self.scr.limit),
-                title: "songs",
-            })?;
-            map.serialize_key("prev")?;
-            map.serialize_value(&HateoasLink {
-                href: format!("/songs?_cq={}&limit={}", self.scr.prev_token, self.scr.limit),
-                title: "Previous page",
-            })?;
-            map.serialize_key("next")?;
-            map.serialize_value(&HateoasLink {
-                href: format!("/songs?_cq={}&limit={}", self.scr.next_token, self.scr.limit),
-                title: "Next page",
-            })?;
-            map.end()
-        }
-    }
-
-    mm.serialize_key("_links")?;
-    mm.serialize_value(&HateoasMeta { scr: scr })?;
-    Ok(())
-}
 
 #[derive(Debug, Clone)]
-pub struct Song {
-    wrapped: model::Song,
+pub struct SongObject<'a> {
+    pub wrapped: &'a model::Song,
 }
 
-impl serde::ser::Serialize for Song
+impl<'a> serde::ser::Serialize for SongObject<'a>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer
@@ -93,11 +20,11 @@ impl serde::ser::Serialize for Song
 
         let mut map = serializer.serialize_map(None)?;
         song_hateoas_partial(&mut map, &self.wrapped)?;
-        song_serialize_partial(&mut map, &self.wrapped, SongOptions {
+        song_serialize_partial(&mut map, &self.wrapped, SongObjectOptions {
             include_blob: false,
             include_album: false,
             include_metadata: false,
-            ..SongOptions::default()
+            ..SongObjectOptions::default()
         })?;
         song_merged_metadata_partial(&mut map, &self.wrapped)?;
         map.end()
@@ -241,17 +168,17 @@ fn song_hateoas_partial<S>(mm: &mut S, song: &model::Song)
     Ok(())
 }
 
-struct SongOptions
+pub struct SongObjectOptions
 {
     include_blob: bool,
     include_album: bool,
     include_metadata: bool,
 }
 
-impl Default for SongOptions
+impl Default for SongObjectOptions
 {
-    fn default() -> SongOptions {
-        SongOptions {
+    fn default() -> SongObjectOptions {
+        SongObjectOptions {
             include_blob: true,
             include_album: true,
             include_metadata: true,
@@ -259,7 +186,7 @@ impl Default for SongOptions
     }
 }
 
-fn song_serialize_partial<S>(mm: &mut S, song: &model::Song, opts: SongOptions)
+fn song_serialize_partial<S>(mm: &mut S, song: &model::Song, opts: SongObjectOptions)
     -> Result<(), S::Error>
     where S: serde::ser::SerializeMap
 {
@@ -273,8 +200,8 @@ fn song_serialize_partial<S>(mm: &mut S, song: &model::Song, opts: SongOptions)
     }
     mm.serialize_key("length_ms")?;
     mm.serialize_value(&song.length_ms)?;
-    mm.serialize_key("track_no")?;
-    mm.serialize_value(&song.track_no)?;
+    // mm.serialize_key("track_no")?;
+    // mm.serialize_value(&song.track_no)?;
     if opts.include_metadata {
         mm.serialize_key("metadata")?;
         mm.serialize_value(&song.metadata)?;
@@ -285,26 +212,4 @@ fn song_serialize_partial<S>(mm: &mut S, song: &model::Song, opts: SongOptions)
     }
 
     Ok(())
-}
-
-struct HateoasLink<'a>
-{
-    href: String,
-    title: &'a str,
-}
-
-impl<'a> serde::ser::Serialize for HateoasLink<'a>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer
-    {
-        use serde::ser::SerializeMap;
-
-        let mut map = serializer.serialize_map(Some(2))?;
-        map.serialize_key("href")?;
-        map.serialize_value(&self.href)?;
-        map.serialize_key("title")?;
-        map.serialize_value(self.title)?;
-        map.end()
-    }
 }
