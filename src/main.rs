@@ -19,7 +19,7 @@ extern crate toml;
 extern crate url;
 
 use std::path::PathBuf;
-use std::io::{self, Read};
+use std::io::{self, Read, Seek};
 use std::fs::File;
 use rocket::{Response, State};
 use rocket_contrib::{JSON as Json};
@@ -229,16 +229,15 @@ fn wrap_json<T: serde::Serialize>(ser: &T) -> impl Responder<'static> {
     builder.finalize()
 }
 
-fn wrap_blob<T: 'static + Read>(rr: T) -> impl Responder<'static> {
+fn wrap_blob<T: 'static + Read + Seek>(rr: T) -> impl Responder<'static> {
     let mut builder = Response::build();
     builder.status(Status::Ok);
-    builder.header(ContentType::JSON);
     if ENABLE_CORS {
         builder.raw_header("Access-Control-Allow-Origin", "*");
         builder.raw_header("Access-Control-Allow-Methods", "GET, POST");
         builder.raw_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
-    builder.chunked_body(rr, 32 * 1024);
+    builder.sized_body(rr);
     builder.finalize()
 }
 
@@ -252,8 +251,6 @@ fn main() {
     rocket::ignite()
         .mount("/static", asset::statics())
         .mount("/", routes![
-
-
             blob_obj_get,
             blob_obj_options,
             tracks_search_get,

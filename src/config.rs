@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Seek};
 use std::path::PathBuf;
 use std::fs::File;
 
@@ -73,18 +73,18 @@ impl VfsDriverConfig
 
 pub trait VfsBackend
 {
-    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>>;
+    fn open_read(&self, blob_id: &BlobId) -> io::Result<File>;
 }
 
 impl VfsBackend for BlobDriver
 {
-    fn open_read(&self, blob_id: &BlobId) -> io::Result<Box<Read>>
+    fn open_read(&self, blob_id: &BlobId) -> io::Result<File>
     {
         let hash = format!("{}", blob_id);
         let path = self.blob_base.join(&hash[0..2]).join(&hash);
         println!("attempting to open path {}", path.display());
         let file = try!(File::open(&path));
-        Ok(Box::new(file))
+        Ok(file)
     }
 }
 

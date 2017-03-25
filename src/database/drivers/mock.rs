@@ -7,6 +7,7 @@ use serde_json;
 use url::Url;
 use uuid::Uuid;
 use super::{DbConnector, SongQuery};
+use ::model::SongSegment;
 use ::database::{
     Song,
     SongId,
@@ -95,9 +96,10 @@ pub struct RawSong {
     pub id: SongId,
     pub blob: String,
     pub length_ms: i32,
-    pub track_no: i16,
+    // pub track_no: i16,
     pub metadata: BTreeMap<String, String>,
     pub album_id: AlbumId,
+    pub segments: Option<Vec<SongSegment>>,
 }
 
 impl RawAlbum
@@ -131,8 +133,9 @@ impl RawSong
             id: self.id.clone(),
             blob: self.blob.clone(),
             length_ms: self.length_ms,
-            track_no: self.track_no,
+            // track_no: self.track_no,
             metadata: self.metadata.clone(),
+            segments: self.segments.clone(),
             album: album,
         })
     }

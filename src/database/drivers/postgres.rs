@@ -76,7 +76,8 @@ impl DbConnector for PostgresConnector {
                 album: album,
                 blob: row.get(1),
                 length_ms: row.get(2),
-                track_no: row.get(3),
+                // track_no: row.get(3),
+                segments: None,
                 metadata: {
                     row.get::<_, Option<JsonDocument>>(4)
                         .unwrap_or_else(JsonDocument::empty)

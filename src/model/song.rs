@@ -11,8 +11,14 @@ pub struct Song {
     pub id: SongId,
     pub blob: String,
     pub length_ms: i32,
-    pub track_no: i16,
+    // pub track_no: i16,
     pub metadata: BTreeMap<String, String>,
     pub album: Album,
+    pub segments: Option<Vec<SongSegment>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SongSegment {
+    start: i64,
+    title: String,
+}
